@@ -32,20 +32,20 @@ type UserData struct {
 	Login string `json:"login"`
 }
 
-func (lhs *TwitchStreamData) GetName() string {
-	return lhs.UserName
+func (ts *TwitchStreamData) GetName() string {
+	return ts.UserName
 }
 
-func (lhs *TwitchStreamData) GetService() string {
+func (ts *TwitchStreamData) GetService() string {
 	return "twitch"
 }
 
-func (lhs *TwitchStreamData) IsFollowed() bool {
+func (ts *TwitchStreamData) IsFollowed() bool {
 	return true
 }
 
-func (lhs *TwitchStreams) update(rhs *TwitchStreams) {
-	lhs.Data = append(lhs.Data, rhs.Data...)
+func (ts *TwitchStreams) update(rhs *TwitchStreams) {
+	ts.Data = append(ts.Data, rhs.Data...)
 }
 
 func (ts *TwitchStreams) Less(i, j int) bool {
@@ -94,7 +94,7 @@ func getLiveTwitchStreamsPart(token, clientID string, twitchFollows *TwitchFollo
 	return jsonBody, nil
 }
 
-// Takes follow IDs and returns which ones are live
+// GetLiveTwitchStreams takes follow IDs and returns which ones are live
 func GetLiveTwitchStreams(token, clientID string, twitchFollows *TwitchFollows) (*TwitchStreams, error) {
 	jsonBody, err := getLiveTwitchStreamsPart(token, clientID, twitchFollows, 0)
 	if err != nil {

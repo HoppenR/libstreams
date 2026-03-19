@@ -62,7 +62,7 @@ func getTwitchFollowsPart(userAccessToken, clientID, userID, pagCursor string) (
 	return jsonBody, nil
 }
 
-// Takes a USER ID and returns all follows
+// GetTwitchFollows takes a userID and returns all follows
 func GetTwitchFollows(userAccessToken, clientID, userID string) (*TwitchFollows, error) {
 	jsonBody, err := getTwitchFollowsPart(userAccessToken, clientID, userID, "")
 	if err != nil {

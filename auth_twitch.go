@@ -44,8 +44,8 @@ type UserAccessToken struct {
 var ErrUnauthorized = errors.New("401 Unauthorized")
 
 func (etb *expirableTokenBase) IsExpired(buffer time.Duration) bool {
-	var expiresInSec time.Duration = time.Duration(etb.ExpiresIn) * time.Second
-	var expirationTime time.Time = etb.IssuedAt.Add(expiresInSec).Add(-buffer)
+	expiresInDuration := time.Duration(etb.ExpiresIn) * time.Second
+	expirationTime := etb.IssuedAt.Add(expiresInDuration).Add(-buffer)
 	return time.Now().After(expirationTime)
 }
 
@@ -212,7 +212,7 @@ func (ad *AuthData) FetchAppAccessToken() error {
 	return err
 }
 
-func (ad *AuthData) ExchangeCodeForUserAccessToken(authorizationCode string, redirectUrl string) error {
+func (ad *AuthData) ExchangeCodeForUserAccessToken(authorizationCode string, redirectURL string) error {
 	req, err := http.NewRequest("POST", "https://id.twitch.tv/oauth2/token", nil)
 	if err != nil {
 		return err
@@ -223,7 +223,7 @@ func (ad *AuthData) ExchangeCodeForUserAccessToken(authorizationCode string, red
 	query.Add("client_secret", ad.clientSecret)
 	query.Add("code", authorizationCode)
 	query.Add("grant_type", "authorization_code")
-	query.Add("redirect_uri", redirectUrl)
+	query.Add("redirect_uri", redirectURL)
 	req.URL.RawQuery = query.Encode()
 
 	var resp *http.Response

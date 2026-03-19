@@ -1,0 +1,6 @@
+.env
+
+# Nix related
+.envrc
+.direnv
+_nix_profile*

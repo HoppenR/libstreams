@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type RedirectError struct {
@@ -26,20 +27,20 @@ func GetServerData(ctx context.Context, address string) (*Streams, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Content-Type", "application/octet-stream")
+	req.Header.Add("Accept", "application/octet-stream")
 
 	var resp *http.Response
 	resp, err = noRedirectClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetching Streams failed: %w", err)
 	}
+	defer resp.Body.Close()
 
 	var streams *Streams
 	streams, err = handleServerResponse(resp)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 	return streams, nil
 }
 
@@ -48,6 +49,11 @@ func handleServerResponse(resp *http.Response) (*Streams, error) {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
+		contentType := resp.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "application/octet-stream") {
+		    return nil, fmt.Errorf("unexpected content type: %s", contentType)
+		}
+
 		streams := new(Streams)
 		dec := gob.NewDecoder(resp.Body)
 		err = dec.Decode(streams)
@@ -56,7 +62,7 @@ func handleServerResponse(resp *http.Response) (*Streams, error) {
 		}
 		return streams, nil
 	case http.StatusFound:
-		var location string = resp.Header.Get("Location")
+		location := resp.Header.Get("Location")
 		var relURL *url.URL
 		relURL, err = url.Parse(location)
 		if err != nil {
@@ -64,7 +70,6 @@ func handleServerResponse(resp *http.Response) (*Streams, error) {
 		}
 		var absoluteURL *url.URL
 		absoluteURL = resp.Request.URL.ResolveReference(relURL)
-		// exec.Command("xdg-open", absoluteURL.String()).Run()
 		return nil, &RedirectError{Location: absoluteURL.String()}
 	default:
 		return nil, fmt.Errorf("status getting streams: %d", resp.StatusCode)
