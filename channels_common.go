@@ -3,7 +3,9 @@
 package libstreams
 
 import (
-	"time"
+	"encoding/gob"
+	"fmt"
+	"io"
 )
 
 type StreamData interface {
@@ -13,8 +15,16 @@ type StreamData interface {
 }
 
 type Streams struct {
-	Strims          *StrimsStreams
-	Twitch          *TwitchStreams
-	LastFetched     time.Time
-	RefreshInterval time.Duration
+	Strims *StrimsStreams
+	Twitch *TwitchStreams
+}
+
+func DecodeStreams(r io.Reader) (*Streams, error) {
+	streams := new(Streams)
+	dec := gob.NewDecoder(r)
+	err := dec.Decode(streams)
+	if err != nil {
+		return nil, fmt.Errorf("decoding Streams failed: %w", err)
+	}
+	return streams, nil
 }
