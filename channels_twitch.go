@@ -3,7 +3,6 @@ package libstreams
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -60,15 +59,15 @@ func (ts *TwitchStreams) Swap(i, j int) {
 	ts.Data[i], ts.Data[j] = ts.Data[j], ts.Data[i]
 }
 
-func getLiveTwitchStreamsPart(token, clientID string, twitchFollows *TwitchFollows, first int) ([]byte, error) {
+func getLiveTwitchStreamsPart(token, clientID string, twitchFollows *TwitchFollows, first int, dst *TwitchStreams) error {
 	req, err := http.NewRequest("GET", "https://api.twitch.tv/helix/streams", nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Add("Authorization", "Bearer "+token)
 	req.Header.Add("Client-Id", clientID)
 	query := make(url.Values)
-	for i := first; i != twitchFollows.Total && i < (first+100); i++ {
+	for i := first; i < twitchFollows.Total && i < (first+100); i++ {
 		query.Add("user_id", twitchFollows.Data[i].BroadcasterID)
 	}
 	query.Add("first", "100")
@@ -79,43 +78,31 @@ func getLiveTwitchStreamsPart(token, clientID string, twitchFollows *TwitchFollo
 	var resp *http.Response
 	resp, err = http.DefaultClient.Do(req.WithContext(ctx))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, ErrUnauthorized
+		return ErrUnauthorized
 	}
 	defer resp.Body.Close()
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
+	part := new(TwitchStreams)
+	err = json.NewDecoder(resp.Body).Decode(part)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return jsonBody, nil
+	dst.update(part)
+	return nil
 }
 
 // GetLiveTwitchStreams takes follow IDs and returns which ones are live
 func GetLiveTwitchStreams(token, clientID string, twitchFollows *TwitchFollows) (*TwitchStreams, error) {
-	jsonBody, err := getLiveTwitchStreamsPart(token, clientID, twitchFollows, 0)
-	if err != nil {
-		return nil, err
-	}
 	twitchStreams := new(TwitchStreams)
-	err = json.Unmarshal(jsonBody, &twitchStreams)
-	if err != nil {
-		return nil, err
-	}
-	for i := 100; i < twitchFollows.Total; i += 100 {
-		jsonBody, err = getLiveTwitchStreamsPart(token, clientID, twitchFollows, i)
+	var err error
+	for i := 0; i < twitchFollows.Total; i += 100 {
+		err = getLiveTwitchStreamsPart(token, clientID, twitchFollows, i, twitchStreams)
 		if err != nil {
 			return nil, err
 		}
-		tmpChannels := new(TwitchStreams)
-		err = json.Unmarshal(jsonBody, &tmpChannels)
-		if err != nil {
-			return nil, err
-		}
-		twitchStreams.update(tmpChannels)
 	}
 	return twitchStreams, nil
 }

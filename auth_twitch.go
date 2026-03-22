@@ -3,7 +3,6 @@ package libstreams
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -51,6 +50,13 @@ type ValidateUserAccessTokenResponse struct {
 
 var ErrUnauthorized = errors.New("401 Unauthorized")
 
+func NewAuthData() *AuthData {
+	return &AuthData{
+		AppAccessToken:  new(AppAccessToken),
+		UserAccessToken: new(UserAccessToken),
+	}
+}
+
 func (etb *expirableTokenBase) IsExpired(buffer time.Duration) bool {
 	expiresInDuration := time.Duration(etb.ExpiresIn) * time.Second
 	expirationTime := etb.IssuedAt.Add(expiresInDuration).Add(-buffer)
@@ -72,23 +78,17 @@ func (ad *AuthData) SetCacheFolder(name string) error {
 }
 
 func (ad *AuthData) SetClientID(clientID string) *AuthData {
-	if ad.ClientID == "" {
-		ad.ClientID = clientID
-	}
+	ad.ClientID = clientID
 	return ad
 }
 
 func (ad *AuthData) SetClientSecret(clientSecret string) *AuthData {
-	if ad.clientSecret == "" {
-		ad.clientSecret = clientSecret
-	}
+	ad.clientSecret = clientSecret
 	return ad
 }
 
 func (ad *AuthData) SetUserName(userName string) *AuthData {
-	if ad.UserName == "" {
-		ad.UserName = userName
-	}
+	ad.UserName = userName
 	return ad
 }
 
@@ -96,39 +96,33 @@ func (ad *AuthData) GetCachedData() error {
 	if ad.cacheFolder == "" {
 		return errors.New("cache folder not set")
 	}
-	if ad.AppAccessToken == nil {
-		var appAccessToken AppAccessToken
-		err := ad.readCache("cachedtoken", &appAccessToken)
-		if err != nil {
-			return err
-		}
-		if !appAccessToken.IsExpired(time.Duration(0)) {
-			ad.AppAccessToken = &appAccessToken
-		}
+	var appAccessToken AppAccessToken
+	err := ad.readCache("cachedtoken", &appAccessToken)
+	if err != nil {
+		return err
 	}
-	if ad.UserAccessToken == nil {
-		var userAccessToken UserAccessToken
-		err := ad.readCache("cacheduseraccesstoken", &userAccessToken)
-		if err != nil {
-			return err
-		}
-		if !userAccessToken.IsExpired(time.Duration(0)) {
-			ad.UserAccessToken = &userAccessToken
-		}
+	if !appAccessToken.IsExpired(time.Duration(0)) {
+		ad.AppAccessToken = &appAccessToken
 	}
-	if ad.UserID == "" {
-		var userID string
-		err := ad.readCache("cacheduserid", &userID)
-		if err != nil {
-			return err
-		}
-		ad.UserID = userID
+	var userAccessToken UserAccessToken
+	err = ad.readCache("cacheduseraccesstoken", &userAccessToken)
+	if err != nil {
+		return err
 	}
+	if !userAccessToken.IsExpired(time.Duration(0)) {
+		ad.UserAccessToken = &userAccessToken
+	}
+	var userID string
+	err = ad.readCache("cacheduserid", &userID)
+	if err != nil {
+		return err
+	}
+	ad.UserID = userID
 	return nil
 }
 
 func (ad *AuthData) GetAppAccessToken() error {
-	if ad.AppAccessToken == nil || ad.AppAccessToken.IsExpired(time.Duration(0)) {
+	if ad.AppAccessToken.IsExpired(time.Duration(0)) {
 		err := ad.FetchAppAccessToken()
 		if err != nil {
 			return err
@@ -179,19 +173,7 @@ func (ad *AuthData) writeCache(fileName string, data any) error {
 	}
 	defer tokenfile.Close()
 
-	var writeBytes []byte
-	writeBytes, err = json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	written, err := tokenfile.Write(writeBytes)
-	if err != nil {
-		return err
-	}
-	if written == 0 {
-		return errors.New("no content written to " + fileName + " file")
-	}
-	return nil
+	return json.NewEncoder(tokenfile).Encode(data)
 }
 
 func (ad *AuthData) FetchAppAccessToken() error {
@@ -210,12 +192,10 @@ func (ad *AuthData) FetchAppAccessToken() error {
 	}
 	defer resp.Body.Close()
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
+	err = json.NewDecoder(resp.Body).Decode(ad.AppAccessToken)
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal(jsonBody, &ad.AppAccessToken)
 	ad.AppAccessToken.IssuedAt = time.Now()
 	return err
 }
@@ -241,13 +221,8 @@ func (ad *AuthData) ExchangeCodeForUserAccessToken(authorizationCode string, red
 	}
 	defer resp.Body.Close()
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
 	token := new(UserAccessToken)
-	err = json.Unmarshal(jsonBody, token)
+	err = json.NewDecoder(resp.Body).Decode(token)
 	token.IssuedAt = time.Now()
 	return token, err
 }
@@ -270,13 +245,8 @@ func (ad *AuthData) ValidateUserAccessToken(token *UserAccessToken) (*ValidateUs
 		return nil, ErrUnauthorized
 	}
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
 	validateTokenResp := new(ValidateUserAccessTokenResponse)
-	err = json.Unmarshal(jsonBody, validateTokenResp)
+	err = json.NewDecoder(resp.Body).Decode(validateTokenResp)
 	if err != nil {
 		return nil, err
 	}
@@ -306,12 +276,10 @@ func (ad *AuthData) RefreshUserAccessToken() error {
 		return ErrUnauthorized
 	}
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
+	err = json.NewDecoder(resp.Body).Decode(ad.UserAccessToken)
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal(jsonBody, &ad.UserAccessToken)
 	ad.UserAccessToken.IssuedAt = time.Now()
 	return err
 }
@@ -334,15 +302,13 @@ func (ad *AuthData) FetchUserID() error {
 	}
 	defer resp.Body.Close()
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
+	userDatas := new(UserDatas)
+	err = json.NewDecoder(resp.Body).Decode(userDatas)
 	if err != nil {
 		return err
 	}
-	userDatas := new(UserDatas)
-	err = json.Unmarshal(jsonBody, &userDatas)
-	if err != nil {
-		return err
+	if len(userDatas.Data) == 0 {
+		return errors.New("userid response contained no user id ")
 	}
 	ad.UserID = userDatas.Data[0].ID
 	return nil
@@ -350,12 +316,10 @@ func (ad *AuthData) FetchUserID() error {
 
 func (ad *AuthData) readCache(fileName string, v any) error {
 	path := filepath.Join(ad.cacheFolder, fileName)
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
-	if len(data) == 0 {
-		return errors.New("no content read from " + fileName + " file")
-	}
-	return json.Unmarshal(data, v)
+	defer f.Close()
+	return json.NewDecoder(f).Decode(v)
 }

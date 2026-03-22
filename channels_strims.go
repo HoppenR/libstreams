@@ -3,7 +3,6 @@ package libstreams
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"time"
 )
@@ -69,13 +68,8 @@ func GetLiveStrimsStreams() (*StrimsStreams, error) {
 	}
 	defer resp.Body.Close()
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
 	strimsStreams := new(StrimsStreams)
-	err = json.Unmarshal(jsonBody, &strimsStreams)
+	err = json.NewDecoder(resp.Body).Decode(strimsStreams)
 	if err != nil {
 		return nil, err
 	}

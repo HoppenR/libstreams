@@ -2,7 +2,6 @@ package libstreams
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
 )
@@ -27,7 +26,7 @@ func (lhs *TwitchFollows) update(rhs *TwitchFollows) {
 	lhs.Pagination = rhs.Pagination
 }
 
-func getTwitchFollowsPart(userAccessToken, clientID, userID, pagCursor string) ([]byte, error) {
+func getTwitchFollowsPart(userAccessToken, clientID, userID, pagCursor string) (*TwitchFollows, error) {
 	req, err := http.NewRequest("GET", "https://api.twitch.tv/helix/channels/followed", nil)
 	if err != nil {
 		return nil, err
@@ -49,41 +48,29 @@ func getTwitchFollowsPart(userAccessToken, clientID, userID, pagCursor string) (
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, ErrUnauthorized
-	} else if resp.StatusCode != http.StatusOK {
-		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var jsonBody []byte
-	jsonBody, err = io.ReadAll(resp.Body)
+	page := new(TwitchFollows)
+	err = json.NewDecoder(resp.Body).Decode(page)
 	if err != nil {
 		return nil, err
 	}
-	return jsonBody, nil
+	return page, nil
 }
 
 // GetTwitchFollows takes a userID and returns all follows
 func GetTwitchFollows(userAccessToken, clientID, userID string) (*TwitchFollows, error) {
-	jsonBody, err := getTwitchFollowsPart(userAccessToken, clientID, userID, "")
+	follows, err := getTwitchFollowsPart(userAccessToken, clientID, userID, "")
 	if err != nil {
 		return nil, err
 	}
-	follows := new(TwitchFollows)
-	err = json.Unmarshal(jsonBody, &follows)
-	if err != nil {
-		return nil, err
-	}
-	for len(follows.Data) != follows.Total {
-		jsonBody, err = getTwitchFollowsPart(userAccessToken, clientID, userID, follows.Pagination.Cursor)
+	for len(follows.Data) < follows.Total {
+		nextPage, err := getTwitchFollowsPart(userAccessToken, clientID, userID, follows.Pagination.Cursor)
 		if err != nil {
 			return nil, err
 		}
-		tmpFollows := new(TwitchFollows)
-		err = json.Unmarshal(jsonBody, &tmpFollows)
-		if err != nil {
-			return nil, err
-		}
-		follows.update(tmpFollows)
+		follows.update(nextPage)
 	}
 	return follows, nil
 }
