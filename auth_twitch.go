@@ -13,12 +13,12 @@ import (
 
 type AuthData struct {
 	AppAccessToken  *AppAccessToken
-	UserAccessToken *UserAccessToken
 	ClientID        string
+	UserAccessToken *UserAccessToken
 	UserID          string
+	UserName        string
 	cacheFolder     string
 	clientSecret    string
-	userName        string
 }
 
 // Helper embeddable struct to implement helper functions like IsExpired
@@ -39,6 +39,14 @@ type UserAccessToken struct {
 	RefreshToken string   `json:"refresh_token"`
 	Scope        []string `json:"scope"`
 	TokenType    string   `json:"token_type"`
+}
+
+type ValidateUserAccessTokenResponse struct {
+	ClientID  string   `json:"client_id"`
+	Login     string   `json:"login"`
+	Scopes    []string `json:"scopes"`
+	UserID    string   `json:"user_id"`
+	ExpiresIn int      `json:"expires_in"`
 }
 
 var ErrUnauthorized = errors.New("401 Unauthorized")
@@ -78,8 +86,8 @@ func (ad *AuthData) SetClientSecret(clientSecret string) *AuthData {
 }
 
 func (ad *AuthData) SetUserName(userName string) *AuthData {
-	if ad.userName == "" {
-		ad.userName = userName
+	if ad.UserName == "" {
+		ad.UserName = userName
 	}
 	return ad
 }
@@ -212,10 +220,10 @@ func (ad *AuthData) FetchAppAccessToken() error {
 	return err
 }
 
-func (ad *AuthData) ExchangeCodeForUserAccessToken(authorizationCode string, redirectURL string) error {
+func (ad *AuthData) ExchangeCodeForUserAccessToken(authorizationCode string, redirectURL string) (*UserAccessToken, error) {
 	req, err := http.NewRequest("POST", "https://id.twitch.tv/oauth2/token", nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	query := make(url.Values)
@@ -229,18 +237,50 @@ func (ad *AuthData) ExchangeCodeForUserAccessToken(authorizationCode string, red
 	var resp *http.Response
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	var jsonBody []byte
 	jsonBody, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	err = json.Unmarshal(jsonBody, &ad.UserAccessToken)
-	ad.UserAccessToken.IssuedAt = time.Now()
-	return err
+	token := new(UserAccessToken)
+	err = json.Unmarshal(jsonBody, token)
+	token.IssuedAt = time.Now()
+	return token, err
+}
+
+func (ad *AuthData) ValidateUserAccessToken(token *UserAccessToken) (*ValidateUserAccessTokenResponse, error) {
+	req, err := http.NewRequest("GET", "https://id.twitch.tv/oauth2/validate", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Authorization", "OAuth "+token.AccessToken)
+
+	var resp *http.Response
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, ErrUnauthorized
+	}
+
+	var jsonBody []byte
+	jsonBody, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	validateTokenResp := new(ValidateUserAccessTokenResponse)
+	err = json.Unmarshal(jsonBody, validateTokenResp)
+	if err != nil {
+		return nil, err
+	}
+	return validateTokenResp, nil
 }
 
 func (ad *AuthData) RefreshUserAccessToken() error {
@@ -261,10 +301,10 @@ func (ad *AuthData) RefreshUserAccessToken() error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
 		return ErrUnauthorized
 	}
-	defer resp.Body.Close()
 
 	var jsonBody []byte
 	jsonBody, err = io.ReadAll(resp.Body)
@@ -284,7 +324,7 @@ func (ad *AuthData) FetchUserID() error {
 	req.Header.Add("Authorization", "Bearer "+ad.AppAccessToken.AccessToken)
 	req.Header.Add("Client-Id", ad.ClientID)
 	query := make(url.Values)
-	query.Add("login", ad.userName)
+	query.Add("login", ad.UserName)
 	req.URL.RawQuery = query.Encode()
 
 	var resp *http.Response
