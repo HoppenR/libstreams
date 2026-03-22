@@ -14,13 +14,13 @@ type TwitchStreams struct {
 }
 
 type TwitchStreamData struct {
-	GameName    string    `json:"game_name"`
-	Language    string    `json:"language"`
-	StartedAt   time.Time `json:"started_at"`
-	Title       string    `json:"title"`
-	Type        string    `json:"type"`
-	UserName    string    `json:"user_name"`
-	ViewerCount int       `json:"viewer_count"`
+	GameName     string    `json:"game_name"`
+	Language     string    `json:"language"`
+	StartedAt    time.Time `json:"started_at"`
+	ThumbnailURL string    `json:"thumbnail_url"`
+	Title        string    `json:"title"`
+	UserName     string    `json:"user_name"`
+	ViewerCount  int       `json:"viewer_count"`
 }
 
 type UserDatas struct {
